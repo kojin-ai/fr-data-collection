@@ -100,11 +100,11 @@ class AdvancedDataCollectorAI:
     def _generate_search_queries(self, topic: str, mode: str, stance: str) -> list[str]:
         prompt = ChatPromptTemplate.from_messages([
             ("system", "テーマと立場に沿った信頼性の高いデータを集めるためのWeb検索キーワードを3つ作成してください。Pythonのリスト形式（['kw1', 'kw2', 'kw3']）の文字列だけで返してください。"),
-            ("user", f"テーマ/議題: {topic}\nモード: {mode}\n立場: {stance if stance else 'なし'}")
+            ("user", "テーマ/議題: {topic}\nモード: {mode}\n立場: {stance}")
         ])
         chain = prompt | self.llm | StrOutputParser()
         try:
-            response = chain.invoke({"topic": topic, "mode": mode, "stance": stance})
+            response = chain.invoke({"topic": topic, "mode": mode, "stance": stance if stance else "なし"})
             queries = eval(response.strip().replace("```python", "").replace("```", ""))
             if isinstance(queries, list):
                 return queries
@@ -113,21 +113,22 @@ class AdvancedDataCollectorAI:
         return [f"{topic} 統計 データ", f"{topic} {stance if stance else ''} 根拠", f"{topic} 最新事例"]
 
     def _format_for_debate(self, topic: str, stance: str, raw_data: str) -> str:
+        # ★ f-string を削除し、LangChainの標準変数構文に修正
         prompt = ChatPromptTemplate.from_messages([
-            ("system", f"""
+            ("system", """
             あなたはディベート戦略専門のデータアナリストです。
             ユーザーの立場【{stance}】に強力な説得力を持たせるためのデータとロジックを整理してください。
 
             【出力フォーマット】
-            ### 1. 【{stance}】側の主立論とキー数値
+            ### 1. 指定立場側の主立論とキー数値
             ### 2. 立場を裏付ける客観的エビデンス・統計データ
             ### 3. 相手側（反対立場）から想定される攻撃・反論
             ### 4. 相手の反論を即座に論破するための切り返しデータ (キラーファクト)
             """),
-            ("user", f"議題: {topic}\n自分の立場: {stance}\n\n収集データ:\n{raw_data}")
+            ("user", "議題: {topic}\n自分の立場: {stance}\n\n収集データ:\n{raw_data}")
         ])
         chain = prompt | self.llm | StrOutputParser()
-        return chain.invoke({"topic": topic, "raw_data": raw_data})
+        return chain.invoke({"topic": topic, "stance": stance, "raw_data": raw_data})
 
     def _format_for_presentation(self, topic: str, raw_data: str) -> str:
         prompt = ChatPromptTemplate.from_messages([
@@ -141,7 +142,7 @@ class AdvancedDataCollectorAI:
             ### 3. スライド構成案用データ
             ### 4. 想定Q&Aとデータ裏付け
             """),
-            ("user", f"テーマ: {topic}\n\n収集データ:\n{raw_data}")
+            ("user", "テーマ: {topic}\n\n収集データ:\n{raw_data}")
         ])
         chain = prompt | self.llm | StrOutputParser()
         return chain.invoke({"topic": topic, "raw_data": raw_data})
@@ -157,7 +158,7 @@ class AdvancedDataCollectorAI:
             ### 🔴 弱点・反論されやすいポイント（注意点）
             ### ⚠️ 注意すべきバイアスや数値の切り取り・前提条件
             """),
-            ("user", f"テーマ: {topic}\n\n収集データ:\n{raw_data}")
+            ("user", "テーマ: {topic}\n\n収集データ:\n{raw_data}")
         ])
         chain = prompt | self.llm | StrOutputParser()
         return chain.invoke({"topic": topic, "raw_data": raw_data})
@@ -171,7 +172,6 @@ with col1:
     st.subheader("📝 入力・条件設定")
     mode_input = st.radio("目的（モード）", ["ディベート用", "プレゼン用"])
     
-    # ④ ディベート選択時の条件追加画面
     stance_input = None
     if mode_input == "ディベート用":
         topic_input = st.text_input("ディベートの議題", placeholder="例: 日本は週休3日制を法的義務化すべきか")
